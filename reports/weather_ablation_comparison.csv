@@ -1,0 +1,3 @@
+model,feature_count,MAE,RMSE
+Random Forest without weather,5,8.366029860457628,11.999068924693324
+Random Forest with weather,10,8.551522358438051,12.230243338824106
