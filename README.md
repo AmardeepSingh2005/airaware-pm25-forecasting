@@ -25,12 +25,14 @@ implementation focuses on predicting PM2.5 one hour ahead.
 The original research questions are not all answered by this
 prototype. Their current status is documented below.
 
+
 | Research question | Current status |
 |---|---|
-| Next-day forecasting | Not evaluated; current model predicts one hour ahead |
-| Added value of weather features | Not yet isolated using a controlled model comparison |
-| Cross-city generalisation | Future work; only one sensor in one city is used |
-| Explainability and uncertainty | Feature importance is available; uncertainty estimation and SHAP analysis remain future work |
+| Next-day forecasting | Not evaluated; the current model predicts one hour ahead |
+| Added value of weather features | Tested on a chronological holdout; adding weather slightly worsened Random Forest performance |
+| Cross-city generalisation | Future work; only one sensor in one city has been analysed |
+| Explainability and uncertainty | Random Forest feature importance is available; SHAP analysis and uncertainty estimation remain future work |
+
 
 ## Data Sources
 
