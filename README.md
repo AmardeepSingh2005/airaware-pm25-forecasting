@@ -17,21 +17,17 @@ These are the project's long-term research objectives:
 3. Does a model trained on one city generalise to another city?
 4. How can we explain predictions and communicate uncertainty?
 
+
 ### Current Project Scope
 
-To produce a working prototype within three days, the current
-implementation focuses on predicting PM2.5 one hour ahead.
-
-The original research questions are not all answered by this
-prototype. Their current status is documented below.
-
+The current prototype focuses on one-hour-ahead PM2.5 forecasting using air-quality measurements from one monitoring sensor in New Delhi, India. The four research questions above define the project's long-term objectives; the current implementation has addressed some aspects of these questions, while others remain future work.
 
 | Research question | Current status |
 |---|---|
-| Next-day forecasting | Not evaluated; the current model predicts one hour ahead |
-| Added value of weather features | Tested on a chronological holdout; adding weather slightly worsened Random Forest performance |
-| Cross-city generalisation | Future work; only one sensor in one city has been analysed |
-| Explainability and uncertainty | Random Forest feature importance is available; SHAP analysis and uncertainty estimation remain future work |
+| Next-day forecasting | Not yet evaluated. The current forecasting model predicts PM2.5 one hour ahead. |
+| Added value of weather features | Evaluated using the same chronological train/test split. Random Forest without weather achieved MAE 8.366 µg/m³ and RMSE 11.999 µg/m³. With weather, MAE was 8.552 µg/m³ and RMSE was 12.230 µg/m³. Weather features did not improve performance on this test set. |
+| Cross-city generalisation | Future work. The current study uses one monitoring sensor in one city. |
+| Explainability and uncertainty | Random Forest feature importance has been analysed. SHAP-based explanations and quantitative uncertainty estimation remain future work. |
 
 
 ## Data Sources
