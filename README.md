@@ -9,6 +9,7 @@
 ![AirAware dashboard showing PM2.5 metrics, historical pollution trends, and analysis tabs](assets/airaware-dashboard.png)
 
 *AirAware's interactive dashboard for exploring historical PM2.5 measurements in New Delhi.*
+
 ## Overview
 
 AirAware combines air-quality observations and weather data to explore PM2.5 patterns, analyze environmental relationships, and evaluate short-term forecasting methods.
@@ -158,20 +159,29 @@ The dashboard uses data and report files from the project directories. Ensure th
 ## Project Structure
 
 ```text
+
 airaware-pm25-forecasting/
 ├── app/
 │   └── dashboard.py
+├── assets/
+│   └── airaware-dashboard.png
 ├── data/
 │   ├── raw/
 │   └── processed/
 ├── reports/
-├── requirements.txt
+├── experiment_models.py
+├── experiment_hybrid_validation.py
+├── experiment_hybrid_walkforward.py
+├── experiment_seasonal_baseline.py
+├── experiment_simple_baselines.py
 ├── prepare_hourly_dataset.py
 ├── train_model.py
 ├── baseline_forecast.py
 ├── weather_ablation.py
 ├── MODEL_EVALUATION.md
+├── requirements.txt
 └── README.md
+
 ```
 
 Additional scripts support data retrieval, data-quality checks, exploratory analysis, correlation analysis, and forecasting experiments.
