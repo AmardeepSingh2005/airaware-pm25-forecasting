@@ -1,192 +1,203 @@
-﻿# AirAware: Air-Quality Forecasting and Data Science
+﻿# 🌫️ AirAware — PM2.5 Analysis & Forecasting
 
-AirAware is an exploratory data science project investigating
-PM2.5 air pollution in New Delhi, India. It combines historical
-air-quality observations with weather estimates, performs exploratory
-analysis, and evaluates machine-learning forecasts.
+**An end-to-end data science project exploring air pollution, weather relationships, and one-hour-ahead PM2.5 forecasting in New Delhi, India.**
 
-The project emphasises reproducibility, chronological evaluation,
-model comparison, and transparent reporting of limitations.
+[🚀 Live Dashboard](https://airaware-pm25.streamlit.app) · [📊 Model Evaluation](MODEL_EVALUATION.md) · [💻 GitHub Repository](https://github.com/AmardeepSingh2005/airaware-pm25-forecasting)
 
-## Research Questions
+## Overview
 
-These are the project's long-term research objectives:
+AirAware combines air-quality observations and weather data to explore PM2.5 patterns, analyze environmental relationships, and evaluate short-term forecasting methods.
 
-1. How accurately can we forecast next-day PM2.5 levels?
-2. Does adding weather data improve forecasting performance?
-3. Does a model trained on one city generalise to another city?
-4. How can we explain predictions and communicate uncertainty?
+The project emphasizes reproducible data preparation, exploratory data analysis, chronological evaluation, model comparison, and transparent reporting of limitations.
 
+### Dashboard
 
-### Current Project Scope
+Explore the interactive Streamlit dashboard to examine:
 
-The current prototype focuses on one-hour-ahead PM2.5 forecasting using air-quality measurements from one monitoring sensor in New Delhi, India. The four research questions above define the project's long-term objectives; the current implementation has addressed some aspects of these questions, while others remain future work.
+- **Overview:** key statistics and air-quality trends.
+- **Explore PM2.5:** historical pollution patterns and distributions.
+- **Weather:** weather conditions and their relationships with PM2.5.
+- **Forecast results:** model predictions and evaluation metrics.
+- **Data quality:** observation coverage and missing-data diagnostics.
 
-| Research question | Current status |
-|---|---|
-| Next-day forecasting | Not yet evaluated. The current forecasting model predicts PM2.5 one hour ahead. |
-| Added value of weather features | Evaluated using the same chronological train/test split. Random Forest without weather achieved MAE 8.366 µg/m³ and RMSE 11.999 µg/m³. With weather, MAE was 8.552 µg/m³ and RMSE was 12.230 µg/m³. Weather features did not improve performance on this test set. |
-| Cross-city generalisation | Future work. The current study uses one monitoring sensor in one city. |
-| Explainability and uncertainty | Random Forest feature importance has been analysed. SHAP-based explanations and quantitative uncertainty estimation remain future work. |
+**[Open the live AirAware dashboard →](https://airaware-pm25.streamlit.app)**
 
+## Key Findings
 
-## Data Sources
+The forecasting experiments produced an important result: more complex models did not automatically provide better predictions than a simple persistence baseline.
 
-- Air quality: OpenAQ API v3.
-- Weather: Open-Meteo Historical Weather API.
-- Location: New Delhi, India.
-- PM2.5 sensor ID: 23534.
-- Observation period: 15 July–13 October 2026.
-
-The recent air-quality dataset contains 1,663 observations.
-The weather dataset contains 2,184 hourly records. All 1,663
-pollution records were matched to corresponding weather records.
-
-## Data Quality
-
-- 1,663 pollution observations were downloaded.
-- No duplicate pollution timestamps were found in the recent dataset.
-- Approximately 77% of expected hourly timestamps were covered.
-- The largest gap between consecutive observations was 357 hours.
-- The hourly modelling dataset contains 1,520 usable examples.
-
-Missing measurement periods were not filled with invented values.
-The project preserves these limitations when preparing the data.
-
-## Exploratory Data Analysis
-
-The initial Pearson correlations with PM2.5 were:
-
-| Variable | Pearson correlation |
-|---|---:|
-| Temperature | 0.109 |
-| Relative humidity | -0.230 |
-| Precipitation | -0.115 |
-| Wind speed | -0.235 |
-
-These are observational associations, not causal effects. The results
-may be affected by temporal patterns, missing observations, and the
-limited study period.
-
-## Forecasting Methodology
-
-### Target
-
-Predict the next hour's PM2.5 concentration.
-
-### Features
-
-- Current PM2.5 measurement.
-- Previous-hour PM2.5 measurement.
-- Three-hour rolling PM2.5 average.
-- Temperature and relative humidity.
-- Precipitation and wind speed.
-- Wind direction.
-- Local hour and day of the week.
-
-### Models
-
-1. Persistence baseline: use the current PM2.5 observation as the
-   next-hour forecast.
-2. Random Forest regression: use recent pollution, weather, and
-   time features.
-
-The dataset was split chronologically: the earliest 80% of usable
-examples were used for training, and the latest 20% were held out
-for testing. This produced 1,216 training examples and 304 test
-examples.
-
-### Initial Test Results
+The following metrics come from the original chronological 80/20 holdout, containing 1,216 training examples and 304 test examples.
 
 | Model | MAE (µg/m³) | RMSE (µg/m³) |
 |---|---:|---:|
-| Persistence baseline | 6.467 | 9.352 |
+| **Persistence baseline** | **6.467** | **9.352** |
 | Random Forest | 8.550 | 12.237 |
 
-The persistence baseline outperformed Random Forest on this
-particular test set. This shows that adding model complexity did
-not automatically improve forecast accuracy.
+The persistence baseline predicts that the next-hour PM2.5 concentration will equal the current reading.
 
-The test period covered September–October 2026. The results are
-preliminary and have not been validated across multiple cities or
-independent monitoring stations.
+Additional experiments tested feature ablation, concentration-specific errors, a hybrid forecasting strategy, rolling means, trend extrapolation, and previous-day seasonal persistence. Persistence remained the strongest overall method across the evaluation procedures completed so far.
 
-## Explainability
+See **[MODEL_EVALUATION.md](MODEL_EVALUATION.md)** for detailed metrics, methodology, rolling-origin results, and limitations.
 
-The Random Forest ranked current PM2.5 as its most important feature,
-with a reported importance of approximately 0.794.
+> **Research takeaway:** establish a strong baseline, evaluate models on chronological data, and report negative results honestly rather than assuming machine learning must improve accuracy.
 
-Feature importance describes how the fitted model uses its inputs.
-It does not establish causation or quantify prediction uncertainty.
+## Research Questions
 
-SHAP-based explanations and calibrated uncertainty estimates have
-not yet been implemented.
+AirAware's broader research objectives are:
+
+1. How accurately can PM2.5 concentrations be forecast?
+2. Does incorporating weather information improve forecasting performance?
+3. Can a model trained in one city generalize to another?
+4. How can predictions and uncertainty be explained to users?
+
+The current prototype focuses on one-hour-ahead forecasting in New Delhi. Next-day forecasting, cross-city generalization, and uncertainty estimation remain future work.
+
+## Data Sources
+
+| Component | Source |
+|---|---|
+| Air-quality observations | OpenAQ API v3 |
+| Weather data | Open-Meteo Historical Weather API |
+| Study location | New Delhi, India |
+| PM2.5 sensor ID | `23534` |
+| Observation period | 15 July–13 October 2026 |
+
+### Data Quality Snapshot
+
+- 1,663 valid PM2.5 observations in the collected pollution dataset.
+- 2,184 hourly weather records downloaded.
+- Approximately 77% coverage of expected hourly timestamps in the pollution series.
+- 1,520 usable examples in the processed hourly forecasting dataset.
+
+Missing pollution measurements and gaps between observations are important limitations. The project does not treat missing readings as real measurements.
+
+## Forecasting Methodology
+
+### Features
+
+The one-hour-ahead forecasting dataset uses:
+
+- Current PM2.5 concentration
+- Previous-hour PM2.5 concentration
+- Trailing three-hour PM2.5 mean
+- Temperature and relative humidity
+- Precipitation, wind speed, and wind direction
+- Local forecast hour and day of the week
+
+### Models Evaluated
+
+The experiments include:
+
+- Persistence baseline
+- Random Forest regression
+- Extra Trees regression
+- Gradient Boosting regression
+- Histogram-based Gradient Boosting
+- Three-hour rolling mean
+- Linear trend extrapolation
+- 24-hour seasonal persistence
+- Experimental threshold-based hybrid forecasting
+
+### Evaluation Approach
+
+The project uses chronological splits to preserve time order and prevent future observations from being used to train models evaluated on earlier periods.
+
+Additional checks examine target timestamp alignment, missing intervals, consecutive hourly observations, feature ablation, and performance across rolling-origin evaluation periods.
+
+MAE (mean absolute error) and RMSE (root mean squared error) are reported in µg/m³. Lower values indicate better predictive accuracy.
+
+Detailed results for the different evaluation sample sizes are available in [MODEL_EVALUATION.md](MODEL_EVALUATION.md).
 
 ## Technology Stack
 
-- Python
-- Pandas and NumPy
-- Matplotlib
-- Scikit-learn
-- Streamlit
-- OpenAQ API
-- Open-Meteo Historical Weather API
+- **Language:** Python
+- **Data processing:** Pandas, NumPy
+- **Machine learning:** Scikit-learn
+- **Visualization:** Matplotlib and dashboard charts
+- **Interactive dashboard:** Streamlit
+- **Data sources:** OpenAQ and Open-Meteo
+- **Version control:** Git and GitHub
 
-## Run the Dashboard
+## Run Locally
 
-Install the project dependencies:
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/AmardeepSingh2005/airaware-pm25-forecasting.git
+cd airaware-pm25-forecasting
+```
+
+### 2. Create and activate a virtual environment
+
+**Windows PowerShell**
 
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. Install dependencies
+
+```bash
 python -m pip install -r requirements.txt
 ```
 
-Start the interactive dashboard from the project root:
+### 4. Launch the dashboard
 
-```powershell
+```bash
 python -m streamlit run app/dashboard.py
 ```
 
-The dashboard requires the relevant data and report files to exist
-in the project directories.
+The dashboard uses data and report files from the project directories. Ensure the required files are present before launching it.
 
-## Important Files
+## Project Structure
 
-- `app/dashboard.py` — interactive Streamlit dashboard.
-- `data/raw/` — downloaded pollution and weather datasets.
-- `data/processed/` — combined and prepared datasets.
-- `reports/hourly_model_predictions.csv` — test predictions.
-- `reports/feature_importance.csv` — Random Forest feature importance.
-- `reports/initial_findings.md` — exploratory findings.
-- `reports/baseline_comparison.csv` — daily baseline comparison.
+```text
+airaware-pm25-forecasting/
+├── app/
+│   └── dashboard.py
+├── data/
+│   ├── raw/
+│   └── processed/
+├── reports/
+├── requirements.txt
+├── prepare_hourly_dataset.py
+├── train_model.py
+├── baseline_forecast.py
+├── weather_ablation.py
+├── MODEL_EVALUATION.md
+└── README.md
+```
+
+Additional scripts support data retrieval, data-quality checks, exploratory analysis, correlation analysis, and forecasting experiments.
 
 ## Limitations
 
-- The study covers one sensor in one city.
-- The observation period is approximately three months.
-- Significant gaps exist in the pollution time series.
-- Historical weather values are model-based estimates, not direct
-  measurements at the pollution sensor.
-- The model evaluation uses one chronological test split.
-- The original next-day forecasting question remains untested.
-- Weather ablation, cross-city validation, and uncertainty estimation
-  remain incomplete.
+- The study focuses on one monitoring location in one city.
+- The observation period is limited and contains substantial gaps.
+- Historical weather estimates are not direct measurements at the pollution sensor.
+- Results may differ across locations, seasons, and pollution conditions.
+- The tested machine-learning models have not consistently beaten persistence.
+- Earlier test periods have been examined during iterative development; a future independent evaluation is still needed.
+- Cross-city generalization, next-day forecasting, SHAP explanations, and calibrated uncertainty estimates remain future work.
 
-AirAware is an educational research prototype. Its predictions
-should not be used for official environmental assessments or
-health decisions.
+AirAware is an educational research prototype. Its forecasts should not be treated as official environmental assessments or used as the sole basis for health decisions.
 
 ## Future Work
 
-1. Compare models with and without weather features using identical
-   chronological splits.
-2. Evaluate next-day forecasts using suitable daily observations.
-3. Test generalisation across multiple monitoring stations and cities.
-4. Add SHAP explanations and quantify forecast uncertainty.
-5. Use repeated chronological evaluation to assess robustness.
-6. Extend the dataset and investigate seasonal patterns.
+- Collect a longer and more continuous pollution time series.
+- Preserve an untouched future test period for independent evaluation.
+- Reassess forecasting accuracy as new data becomes available.
+- Investigate model performance across different pollution conditions.
+- Evaluate generalization across additional monitoring stations and cities.
+- Add explainability and uncertainty estimation where appropriate.
 
-## Research Integrity
+## Project Status
 
-The reported results represent the experiments completed to date.
-Uncompleted research questions are explicitly identified rather than
-presented as established findings.
+AirAware has a working interactive dashboard, a processed hourly forecasting dataset, and documented model-evaluation experiments. The current evidence favors persistence over the tested machine-learning approaches.
+
+The project records both successful findings and experiments that did not improve predictive accuracy.
+
+**[Explore the live dashboard →](https://airaware-pm25.streamlit.app)**
+
+**[Read the full model evaluation →](MODEL_EVALUATION.md)**
