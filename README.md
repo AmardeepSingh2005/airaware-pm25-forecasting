@@ -4,6 +4,11 @@
 
 [🚀 Live Dashboard](https://airaware-pm25.streamlit.app) · [📊 Model Evaluation](MODEL_EVALUATION.md) · [💻 GitHub Repository](https://github.com/AmardeepSingh2005/airaware-pm25-forecasting)
 
+## Dashboard Preview
+
+![AirAware dashboard showing PM2.5 metrics, historical pollution trends, and analysis tabs](assets/airaware-dashboard.png)
+
+*AirAware's interactive dashboard for exploring historical PM2.5 measurements in New Delhi.*
 ## Overview
 
 AirAware combines air-quality observations and weather data to explore PM2.5 patterns, analyze environmental relationships, and evaluate short-term forecasting methods.
