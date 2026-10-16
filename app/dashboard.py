@@ -1,4 +1,8 @@
-﻿from pathlib import Path
+﻿import json
+from pathlib import Path
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
@@ -10,6 +14,43 @@ FILES = {
     "predictions": ROOT / "reports/hourly_model_predictions.csv",
     "importance": ROOT / "reports/feature_importance.csv",
 }
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_live_air_quality():
+    """Fetch current modelled conditions and hourly PM2.5 forecasts."""
+    params = {
+        "latitude": 28.6139,
+        "longitude": 77.2090,
+        "current": "pm2_5",
+        "hourly": "pm2_5",
+        "forecast_hours": 48,
+        "timezone": "Asia/Kolkata",
+    }
+
+    url = (
+        "https://air-quality-api.open-meteo.com/v1/air-quality?"
+        + urlencode(params)
+    )
+
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "AirAware-Student-Research/1.0",
+            "Accept": "application/json",
+        },
+    )
+
+    with urlopen(request, timeout=25) as response:
+        if response.status != 200:
+            raise RuntimeError(
+                f"Air-quality API returned HTTP {response.status}"
+            )
+        payload = json.loads(response.read().decode("utf-8"))
+
+    hourly = payload.get("hourly", {})
+    if not hourly.get("time") or not hourly.get("pm2_5"):
+        raise ValueError("The API returned no hourly PM2.5 forecast.")
+
+    return payload
 
 st.set_page_config(
     page_title="AirAware | Air quality analytics",
@@ -130,7 +171,7 @@ with st.sidebar:
     st.markdown("🤖  Forecast evaluation")
     st.markdown("---")
     st.caption("🎓 Student research prototype")
-    st.caption("Historical dataset · Not a live alert")
+st.caption("Historical analysis + modelled forecasts")
 
 # Header hero
 st.markdown(
@@ -145,13 +186,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Status and time-range context
-st.markdown(
-    f'<span class="pill pill-blue">📚 Historical data</span> '
-    f'<span class="pill pill-amber">Not live monitoring</span> '
-    f'<span class="muted">Data window: {first_time.strftime("%d %b %Y")} – {last_time.strftime("%d %b %Y")}</span>',
-    unsafe_allow_html=True,
-)
+
 st.write("")
 
 # KPI row inspired by the reference design, using actual project data only.
@@ -174,8 +209,13 @@ with k4:
     <div class="metric-foot">Coverage may contain gaps</div></div>""", unsafe_allow_html=True)
 
 st.write("")
-overview_tab, explore_tab, weather_tab, model_tab, quality_tab = st.tabs([
-    "✨ Overview", "📈 Explore PM2.5", "🌦️ Weather", "🤖 Forecast results", "🛡️ Data quality"
+overview_tab, explore_tab, weather_tab, model_tab, quality_tab, live_tab = st.tabs([
+    "✨ Overview",
+    "📈 Explore PM2.5",
+    "🌦️ Weather",
+    "🤖 Forecast results",
+    "🛡️ Data quality",
+    "⚡ Live Forecast",
 ])
 
 def style_axis(ax):
@@ -208,7 +248,7 @@ with overview_tab:
         style_axis(ax)
         ax.legend(frameon=False, ncol=2, fontsize=8, loc="upper left")
         fig.tight_layout()
-        st.pyplot(fig, use_container_width=True)
+        st.pyplot(fig, width="stretch")
         plt.close(fig)
     with right:
         st.markdown('<div class="section-title">🧭 At a glance</div>', unsafe_allow_html=True)
@@ -255,10 +295,10 @@ with explore_tab:
         ax.set_xlabel("Time (UTC)")
         style_axis(ax)
         fig.tight_layout()
-        st.pyplot(fig, use_container_width=True)
+        st.pyplot(fig, width="stretch")
         plt.close(fig)
         with st.expander("View filtered observations"):
-            st.dataframe(filtered[["datetime_utc", "pm25"]].tail(100), use_container_width=True, hide_index=True)
+            st.dataframe(filtered[["datetime_utc", "pm25"]].tail(100), width="stretch", hide_index=True)
 
 with weather_tab:
     st.markdown('<div class="section-title">🌦️ Does weather move with pollution?</div>', unsafe_allow_html=True)
@@ -286,7 +326,7 @@ with weather_tab:
             ax.set_ylabel("PM2.5 (µg/m³)")
             style_axis(ax)
             fig.tight_layout()
-            st.pyplot(fig, use_container_width=True)
+            st.pyplot(fig, width="stretch")
             plt.close(fig)
         with right:
             st.metric("Pearson correlation", f"{corr:+.3f}" if pd.notna(corr) else "Not available")
@@ -296,7 +336,7 @@ with weather_tab:
         corr_table = combined[cols].corr()["pm25"].drop("pm25").rename("Pearson correlation").to_frame().round(3)
         corr_table.index = [x.replace("_", " ").title() for x in corr_table.index]
         st.markdown("**All available weather correlations**")
-        st.dataframe(corr_table, use_container_width=True)
+        st.dataframe(corr_table, width="stretch")
 
 with model_tab:
     st.markdown('<div class="section-title">🤖 How well did the forecasts perform?</div>', unsafe_allow_html=True)
@@ -321,7 +361,7 @@ with model_tab:
         left, right = st.columns([1.15, 1], gap="large")
         with left:
             st.markdown("**Model comparison**")
-            st.dataframe(metric_df.round(3), use_container_width=True)
+            st.dataframe(metric_df.round(3), width="stretch")
             fig, ax = plt.subplots(figsize=(7.5, 3.8), dpi=110)
             fig.patch.set_facecolor("#fff")
             metric_df.plot(kind="bar", ax=ax, color=["#2463eb", "#9bbcf8"], width=.65)
@@ -330,7 +370,7 @@ with model_tab:
             ax.tick_params(axis="x", rotation=0)
             style_axis(ax)
             fig.tight_layout()
-            st.pyplot(fig, use_container_width=True)
+            st.pyplot(fig, width="stretch")
             plt.close(fig)
         with right:
             st.markdown("**🧠 Plain-English takeaway**")
@@ -350,7 +390,7 @@ with model_tab:
                 ax.set_xlabel("Relative feature importance")
                 style_axis(ax)
                 fig.tight_layout()
-                st.pyplot(fig, use_container_width=True)
+                st.pyplot(fig, width="stretch")
                 plt.close(fig)
 
 with quality_tab:
@@ -373,7 +413,175 @@ with quality_tab:
     st.markdown("**Recent observations**")
     recent = pollution.tail(15)[["datetime_utc", "pm25"]].copy()
     recent["datetime_utc"] = recent["datetime_utc"].dt.strftime("%Y-%m-%d %H:%M UTC")
-    st.dataframe(recent, use_container_width=True, hide_index=True)
+    st.dataframe(recent, width="stretch", hide_index=True)
+
+    # Live Air Quality tab: external atmospheric-model forecast, not Random Forest.
+with live_tab:
+    st.markdown(
+        '<div class="section-title">⚡ Live PM2.5 Forecast — New Delhi</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="muted">Fresh API data for New Delhi. Forecast values are '
+        'model estimates, not direct sensor readings.</div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.button("🔄 Refresh live forecast", key="refresh_live_forecast"):
+        fetch_live_air_quality.clear()
+
+    try:
+        with st.spinner("Fetching the latest available air-quality forecast..."):
+            live_payload = fetch_live_air_quality()
+
+        current_data = live_payload.get("current", {})
+        hourly_data = live_payload.get("hourly", {})
+
+        current_value = pd.to_numeric(
+            current_data.get("pm2_5"), errors="coerce"
+        )
+        current_time = pd.to_datetime(
+            current_data.get("time"), errors="coerce"
+        )
+
+        # Prepare and validate the hourly forecast.
+        forecast_df = pd.DataFrame({
+            "time": hourly_data.get("time", []),
+            "pm2_5": hourly_data.get("pm2_5", []),
+        })
+        forecast_df["time"] = pd.to_datetime(
+            forecast_df["time"], errors="coerce"
+        )
+        forecast_df["pm2_5"] = pd.to_numeric(
+            forecast_df["pm2_5"], errors="coerce"
+        )
+        forecast_df = (
+            forecast_df.dropna(subset=["time", "pm2_5"])
+            .sort_values("time")
+            .drop_duplicates(subset="time")
+        )
+
+        # Keep only forecast timestamps after the API's current time.
+        if pd.notna(current_time):
+            future_df = forecast_df[
+                forecast_df["time"] > current_time
+            ].head(24)
+        else:
+            future_df = pd.DataFrame(
+                columns=["time", "pm2_5"]
+            )
+
+        m1, m2, m3 = st.columns(3)
+
+        with m1:
+            st.metric(
+                "Current modelled PM2.5",
+                f"{float(current_value):.1f} µg/m³"
+                if pd.notna(current_value) else "Unavailable",
+            )
+            if pd.notna(current_time):
+                st.caption(
+                    "API current time: "
+                    + current_time.strftime("%d %b %Y, %I:%M %p")
+                    + " IST"
+                )
+
+        with m2:
+            st.metric(
+                "Next-24-hour average",
+                f"{future_df['pm2_5'].mean():.1f} µg/m³"
+                if not future_df.empty else "Unavailable",
+            )
+
+        with m3:
+            if not future_df.empty:
+                peak_row = future_df.loc[
+                    future_df["pm2_5"].idxmax()
+                ]
+                st.metric(
+                    "Next-24-hour forecast peak",
+                    f"{peak_row['pm2_5']:.1f} µg/m³",
+                )
+                st.caption(
+                    peak_row["time"].strftime("%d %b, %I:%M %p")
+                    + " IST"
+                )
+            else:
+                st.metric("Next-24-hour forecast peak", "Unavailable")
+
+        if not future_df.empty:
+            st.markdown("### 📈 Hourly PM2.5 forecast")
+
+            fig, ax = plt.subplots(figsize=(11, 4.2), dpi=110)
+            fig.patch.set_facecolor("#ffffff")
+
+            ax.plot(
+                future_df["time"],
+                future_df["pm2_5"],
+                color="#2463eb",
+                linewidth=2.2,
+                marker="o",
+                markersize=3.5,
+            )
+            ax.fill_between(
+                future_df["time"],
+                future_df["pm2_5"],
+                alpha=0.12,
+                color="#2463eb",
+            )
+            ax.set_ylabel("Forecast PM2.5 (µg/m³)")
+            ax.set_xlabel("Time (IST)")
+            ax.set_title("Next 24 hours — New Delhi")
+            style_axis(ax)
+            fig.autofmt_xdate()
+            fig.tight_layout()
+            st.pyplot(fig, width="stretch")
+            plt.close(fig)
+
+            display_df = future_df.rename(
+                columns={
+                    "time": "Forecast time (IST)",
+                    "pm2_5": "Forecast PM2.5 (µg/m³)",
+                }
+            ).copy()
+            display_df["Forecast time (IST)"] = (
+                display_df["Forecast time (IST)"].dt.strftime(
+                    "%d %b %Y, %I:%M %p"
+                )
+            )
+
+            with st.expander("View hourly forecast values"):
+                st.dataframe(
+                    display_df,
+                    width="stretch",
+                    hide_index=True,
+                )
+        else:
+            st.warning(
+                "The API responded, but no future hourly PM2.5 values "
+                "were available. Try refreshing later."
+            )
+
+        st.caption(
+            "Source: Open-Meteo Air Quality API. "
+            "API current conditions and forecasts are model estimates; "
+            "they are not verified live readings from your original sensor."
+        )
+        st.caption(
+            "API timezone: "
+            + str(live_payload.get("timezone", "not provided"))
+            + " · Results are cached for up to 15 minutes."
+        )
+
+    except Exception as exc:
+        st.error(
+            "Unable to retrieve the live forecast right now. "
+            "Check your internet connection or try again later."
+        )
+        st.caption(f"Technical detail: {type(exc).__name__}: {exc}")
 
 st.markdown("---")
-st.caption("AirAware · Student research prototype · New Delhi · Historical data only")
+st.caption(
+    "AirAware · New Delhi · Historical analysis + Open-Meteo forecasts "
+    "· Student research prototype"
+)
