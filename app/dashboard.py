@@ -1,7 +1,9 @@
 ﻿import json
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -50,7 +52,106 @@ def fetch_live_air_quality():
     if not hourly.get("time") or not hourly.get("pm2_5"):
         raise ValueError("The API returned no hourly PM2.5 forecast.")
 
+    payload["_airaware_fetched_at"] = datetime.now(timezone.utc).isoformat()
     return payload
+@st.cache_resource
+def get_supabase_client():
+    """Create one reusable Supabase client using local/cloud secrets."""
+    from supabase import create_client
+
+    url = st.secrets.get("SUPABASE_URL")
+    key = (
+        st.secrets.get("SUPABASE_SECRET_KEY")
+        or st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+    )
+
+    if not url or not key:
+        raise RuntimeError(
+            "Supabase URL or backend secret key is missing."
+        )
+
+    return create_client(url, key)
+
+
+def save_forecast_snapshots(payload):
+    """Save the next 24 forecast hours captured by AirAware."""
+    timezone_name = payload.get("timezone", "Asia/Kolkata")
+    local_zone = ZoneInfo(timezone_name)
+
+    current_raw = payload.get("current", {}).get("time")
+    if not current_raw:
+        raise ValueError("API response has no current timestamp.")
+
+    current_local = datetime.fromisoformat(str(current_raw))
+    if current_local.tzinfo is None:
+        current_local = current_local.replace(tzinfo=local_zone)
+
+    issued_raw = payload.get("_airaware_fetched_at")
+    issued_at = (
+        datetime.fromisoformat(issued_raw)
+        if issued_raw
+        else datetime.now(timezone.utc)
+    )
+    if issued_at.tzinfo is None:
+        issued_at = issued_at.replace(tzinfo=timezone.utc)
+    issued_at = issued_at.astimezone(timezone.utc)
+
+    hourly = payload.get("hourly", {})
+    times = hourly.get("time", [])
+    values = hourly.get("pm2_5", [])
+
+    rows = []
+
+    for raw_time, raw_value in zip(times, values):
+        if raw_value is None:
+            continue
+
+        try:
+            valid_local = datetime.fromisoformat(str(raw_time))
+            if valid_local.tzinfo is None:
+                valid_local = valid_local.replace(tzinfo=local_zone)
+
+            predicted = float(raw_value)
+            if predicted < 0:
+                continue
+
+            valid_utc = valid_local.astimezone(timezone.utc)
+
+            # Exclude historical hours and the current hour.
+            if valid_local <= current_local:
+                continue
+
+            horizon = max(
+                0.0,
+                (valid_utc - issued_at).total_seconds() / 3600.0,
+            )
+
+
+            rows.append({
+                "provider": "open-meteo",
+                "location": "New Delhi",
+                "issued_at": issued_at.isoformat(),
+                "valid_at": valid_utc.isoformat(),
+                "forecast_horizon_hours": horizon,
+                "predicted_pm25": predicted,
+            })
+
+            if len(rows) >= 24:
+                break
+
+        except (TypeError, ValueError, OverflowError):
+            continue
+
+    if not rows:
+        return 0
+
+    client = get_supabase_client()
+    client.table("forecast_snapshots").upsert(
+        rows,
+        on_conflict="provider,location,issued_at,valid_at",
+    ).execute()
+
+    return len(rows)
 
 st.set_page_config(
     page_title="AirAware | Air quality analytics",
@@ -171,7 +272,7 @@ with st.sidebar:
     st.markdown("🤖  Forecast evaluation")
     st.markdown("---")
     st.caption("🎓 Student research prototype")
-st.caption("Historical analysis + modelled forecasts")
+    st.caption("Historical analysis + modelled forecasts")
 
 # Header hero
 st.markdown(
@@ -304,7 +405,7 @@ with weather_tab:
     st.markdown('<div class="section-title">🌦️ Does weather move with pollution?</div>', unsafe_allow_html=True)
     st.markdown('<div class="muted">Select a weather measure to explore its relationship with PM2.5. This is descriptive analysis, not proof of causation.</div>', unsafe_allow_html=True)
     weather_choices = {
-        "🌡️ Temperature (°C)": "temperature_2m",
+        "Temperature (°C)": "temperature_2m",
         "💧 Relative humidity (%)": "relative_humidity_2m",
         "🌧️ Precipitation (mm)": "precipitation",
         "💨 Wind speed (km/h)": "wind_speed_10m",
@@ -433,6 +534,22 @@ with live_tab:
     try:
         with st.spinner("Fetching the latest available air-quality forecast..."):
             live_payload = fetch_live_air_quality()
+                    # Save the forecast snapshot without breaking dashboard display.
+        try:
+            saved_rows = save_forecast_snapshots(live_payload)
+            st.caption(
+                f"Forecast tracking: {saved_rows} future hourly "
+                "values saved or updated in Supabase."
+            )
+        except Exception as db_exc:
+            st.warning(
+                "The live forecast loaded, but its snapshot could not "
+                "be saved to Supabase."
+            )
+            st.caption(
+                f"Database detail: {type(db_exc).__name__}: "
+                f"{str(db_exc)[:300]}"
+            )
 
         current_data = live_payload.get("current", {})
         hourly_data = live_payload.get("hourly", {})
