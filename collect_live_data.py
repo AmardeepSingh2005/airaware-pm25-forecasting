@@ -244,6 +244,81 @@ def fetch_recent_openaq_observations(api_key):
 
         page += 1
 
+    # The sensor metadata endpoint can expose a latest value newer than the
+    # measurements listing. Supplement the raw history with that point when
+    # it falls within this collection window. Keep existing raw records when
+    # the timestamp already exists. OpenAQ notes that metadata/latest views
+    # may not provide complete time-series coverage, so this is supplemental.
+    try:
+        latest_url = f"https://api.openaq.org/v3/sensors/{SENSOR_ID}"
+        latest_request = Request(
+            latest_url,
+            headers={
+                "X-API-Key": api_key,
+                "Accept": "application/json",
+                "User-Agent": "AirAware-Research/1.0",
+            },
+        )
+        with urlopen(latest_request, timeout=30) as response:
+            if response.status != 200:
+                raise RuntimeError(
+                    f"OpenAQ sensor metadata returned HTTP {response.status}"
+                )
+            metadata_payload = json.loads(response.read().decode("utf-8"))
+
+        metadata_results = metadata_payload.get("results", [])
+        if metadata_results:
+            sensor = metadata_results[0]
+            latest = sensor.get("latest") or {}
+            latest_datetime = latest.get("datetime") or {}
+            latest_raw_time = (
+                latest_datetime.get("utc")
+                if isinstance(latest_datetime, dict)
+                else latest_datetime
+            )
+            latest_raw_value = latest.get("value")
+            parameter = sensor.get("parameter") or {}
+
+            if latest_raw_time and latest_raw_value is not None:
+                latest_at = datetime.fromisoformat(
+                    str(latest_raw_time).replace("Z", "+00:00")
+                )
+                if latest_at.tzinfo is None:
+                    latest_at = latest_at.replace(tzinfo=timezone.utc)
+                latest_at = latest_at.astimezone(timezone.utc)
+                latest_value = float(latest_raw_value)
+
+                if (
+                    latest_value >= 0
+                    and start <= latest_at <= end
+                ):
+                    latest_key = latest_at.isoformat()
+                    if latest_key not in observations:
+                        observations[latest_key] = {
+                            "source": "OpenAQ",
+                            "sensor_id": str(SENSOR_ID),
+                            "location": LOCATION,
+                            "observed_at": latest_at.isoformat(),
+                            "observed_pm25": latest_value,
+                            "unit": parameter.get("units") or "µg/m³",
+                        }
+                        print(
+                            "Supplemental sensor metadata reading added:",
+                            latest_at.isoformat(),
+                            f"({latest_value:g} µg/m³)",
+                        )
+                    else:
+                        print(
+                            "Sensor metadata latest already exists in measurements:",
+                            latest_at.isoformat(),
+                        )
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
+        # Preserve successful history collection if only metadata retrieval fails.
+        print(
+            "Warning: sensor metadata latest could not be added:",
+            f"{type(exc).__name__}: {exc}",
+        )
+
     if not observations:
         raise RuntimeError(
             "OpenAQ returned no valid observations in the last seven days."
