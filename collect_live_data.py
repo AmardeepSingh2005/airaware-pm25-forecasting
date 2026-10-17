@@ -89,11 +89,20 @@ def fetch_open_meteo_forecast():
     return payload
 
 
-def build_forecast_rows(payload):
-    """Prepare 24 future forecast hours for Supabase."""
+def build_forecast_rows(payload, issued_at=None):
+    """Prepare 24 future forecast hours for Supabase.
+
+    `issued_at` should be captured immediately before requesting the forecast,
+    so the saved lead time reflects when the forecast request was made.
+    """
     zone_name = payload.get("timezone", "Asia/Kolkata")
     local_zone = ZoneInfo(zone_name)
-    issued_at = datetime.now(timezone.utc)
+    if issued_at is None:
+        issued_at = datetime.now(timezone.utc)
+    elif issued_at.tzinfo is None:
+        issued_at = issued_at.replace(tzinfo=timezone.utc)
+    else:
+        issued_at = issued_at.astimezone(timezone.utc)
 
     hourly = payload["hourly"]
     rows = []
@@ -261,8 +270,13 @@ def main():
     client = create_client(supabase_url, supabase_key)
 
     # Save forecasts first so a temporary OpenAQ issue doesn't discard them.
+    # Capture issue time before the API call, not after the response returns.
+    forecast_issued_at = datetime.now(timezone.utc)
     forecast_payload = fetch_open_meteo_forecast()
-    forecast_rows = build_forecast_rows(forecast_payload)
+    forecast_rows = build_forecast_rows(
+        forecast_payload,
+        issued_at=forecast_issued_at,
+    )
 
     upsert_batches(
         client,
