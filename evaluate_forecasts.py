@@ -286,44 +286,59 @@ def horizon_group(value: Any) -> str:
     return "24+ h"
 
 
+def latest_issue_per_target(detail: pd.DataFrame) -> pd.DataFrame:
+    """Select one forecast per valid hour: the latest issue before that target."""
+    if detail.empty:
+        return detail.copy()
+    return (
+        detail.sort_values(["valid_at", "issued_at"])
+        .drop_duplicates(subset=["valid_at"], keep="last")
+        .copy()
+    )
+
+
 def build_metrics(detail: pd.DataFrame) -> pd.DataFrame:
+    """Score a deduplicated forecast sample overall and within lead-time bands.
+
+    Each valid_at contributes no more than one forecast to a given row: the
+    latest-issued forecast in the target's overall set or in that horizon band.
+    This prevents targets with many saved snapshots from dominating the metrics.
+    """
     rows: list[dict[str, Any]] = []
-    groups = [("All matured forecasts", detail)]
+    groups = [("Latest forecast per target (overall)", latest_issue_per_target(detail))]
     ordered_groups = ["0–3 h", "3–6 h", "6–9 h", "9–12 h", "12–24 h", "24+ h", "Unknown"]
     for group_name in ordered_groups:
         subset = detail[detail["horizon_group"] == group_name]
         if not subset.empty:
-            groups.append((group_name, subset))
+            groups.append((group_name, latest_issue_per_target(subset)))
 
     for group_name, subset in groups:
-        matched = subset.dropna(subset=["observed_pm25", "predicted_pm25"])
+        matched = subset.dropna(subset=["observed_pm25", "predicted_pm25"]).copy()
         forecast_metrics = metrics_for(matched["observed_pm25"], matched["predicted_pm25"])
         baseline_matched = matched.dropna(subset=["persistence_pm25"])
         baseline_metrics = metrics_for(
             baseline_matched["observed_pm25"], baseline_matched["persistence_pm25"]
         )
-        # For a fair comparison, also score the forecast on exactly the same rows
-        # where the persistence baseline had a usable prior observation.
+        # Compare the forecast and persistence on exactly the same selected targets.
         paired_forecast_metrics = metrics_for(
             baseline_matched["observed_pm25"], baseline_matched["predicted_pm25"]
         )
-        count = len(matched)
-        baseline_count = len(baseline_matched)
         rows.append({
-            "Horizon group": group_name,
-            "Forecast matches (n)": count,
-            "Forecast MAE (all matches, µg/m³)": forecast_metrics["MAE"],
-            "Forecast RMSE (all matches, µg/m³)": forecast_metrics["RMSE"],
-            "Forecast bias (all matches, µg/m³)": forecast_metrics["Bias"],
+            "Evaluation group": group_name,
+            "Forecast targets scored (n)": int(matched["valid_at"].nunique()),
+            "Distinct actual timestamps (n)": int(matched["matched_observed_at"].nunique()),
+            "Forecast MAE (µg/m³)": forecast_metrics["MAE"],
+            "Forecast RMSE (µg/m³)": forecast_metrics["RMSE"],
+            "Forecast bias (µg/m³)": forecast_metrics["Bias"],
             "Paired forecast MAE (µg/m³)": paired_forecast_metrics["MAE"],
             "Paired forecast RMSE (µg/m³)": paired_forecast_metrics["RMSE"],
-            "Persistence matches (n)": baseline_count,
+            "Persistence targets scored (n)": int(baseline_matched["valid_at"].nunique()),
             "Persistence MAE (µg/m³)": baseline_metrics["MAE"],
             "Persistence RMSE (µg/m³)": baseline_metrics["RMSE"],
             "Persistence bias (µg/m³)": baseline_metrics["Bias"],
             "MAE improvement vs persistence (%)": (
                 100.0 * (baseline_metrics["MAE"] - paired_forecast_metrics["MAE"]) / baseline_metrics["MAE"]
-                if baseline_count and pd.notna(baseline_metrics["MAE"]) and baseline_metrics["MAE"] != 0
+                if len(baseline_matched) and pd.notna(baseline_metrics["MAE"]) and baseline_metrics["MAE"] != 0
                 and pd.notna(paired_forecast_metrics["MAE"])
                 else np.nan
             ),
@@ -540,31 +555,32 @@ def main() -> int:
     print(f"Matured forecast rows checked: {total_matured:,} (excluded future/not-yet-matured: {matured_excluded:,})")
     unique_target_count = int(evaluated["valid_at"].nunique())
     unique_observation_count = int(evaluated["matched_observed_at"].nunique())
-    print(f"Matched forecast rows: {len(evaluated):,} / {total_matured:,} ({match_rate:.1f}%)")
+    print(f"Raw matched forecast rows: {len(evaluated):,} / {total_matured:,} ({match_rate:.1f}%)")
     print(f"Distinct forecast target timestamps matched: {unique_target_count:,}")
     print(f"Distinct observation timestamps used: {unique_observation_count:,}")
     print(f"Matching tolerance: ±{args.match_tolerance_minutes} minutes")
     print(f"Persistence reading age limit: {args.persistence_max_age_hours:g} hours")
-    print(f"Forecast MAE (all matched rows): {all_row['Forecast MAE (all matches, µg/m³)']:.2f} µg/m³")
-    print(f"Forecast RMSE (all matched rows): {all_row['Forecast RMSE (all matches, µg/m³)']:.2f} µg/m³")
-    print(f"Forecast bias (all matched rows): {all_row['Forecast bias (all matches, µg/m³)']:+.2f} µg/m³")
+    print("Primary score uses one latest-issued forecast per target timestamp.")
+    if pd.notna(all_row["Forecast MAE (µg/m³)"]):
+        print(f"Unique-target forecast MAE: {all_row['Forecast MAE (µg/m³)']:.2f} µg/m³")
+        print(f"Unique-target forecast RMSE: {all_row['Forecast RMSE (µg/m³)']:.2f} µg/m³")
+        print(f"Unique-target forecast bias: {all_row['Forecast bias (µg/m³)']:+.2f} µg/m³")
 
     if pd.notna(all_row["Persistence MAE (µg/m³)"]):
-        print(f"Persistence MAE: {all_row['Persistence MAE (µg/m³)']:.2f} µg/m³")
-        print(f"Persistence RMSE: {all_row['Persistence RMSE (µg/m³)']:.2f} µg/m³")
-        print(f"Paired forecast MAE on same rows: {all_row['Paired forecast MAE (µg/m³)']:.2f} µg/m³")
+        print(f"Paired persistence MAE: {all_row['Persistence MAE (µg/m³)']:.2f} µg/m³")
+        print(f"Paired persistence RMSE: {all_row['Persistence RMSE (µg/m³)']:.2f} µg/m³")
         improvement = all_row["MAE improvement vs persistence (%)"]
         if pd.notna(improvement):
             comparison = "better" if improvement > 0 else "worse" if improvement < 0 else "equal to"
-            print(f"Forecast MAE vs persistence: {abs(improvement):.1f}% {comparison}")
+            print(f"Unique-target forecast MAE vs persistence: {abs(improvement):.1f}% {comparison}")
     else:
-        print("Persistence metrics unavailable: no recent enough observation existed at issue time for the matched rows.")
+        print("Persistence metrics unavailable: no recent enough observation existed at issue time for the matched targets.")
 
-    print("\nMetrics by forecast horizon")
+    print("\nMetrics by forecast horizon (one forecast per target per group)")
     print(metrics.to_string(index=False, formatters={
-        "Forecast MAE (all matches, µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:.2f}",
-        "Forecast RMSE (all matches, µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:.2f}",
-        "Forecast bias (all matches, µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:+.2f}",
+        "Forecast MAE (µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:.2f}",
+        "Forecast RMSE (µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:.2f}",
+        "Forecast bias (µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:+.2f}",
         "Paired forecast MAE (µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:.2f}",
         "Paired forecast RMSE (µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:.2f}",
         "Persistence MAE (µg/m³)": lambda x: "—" if pd.isna(x) else f"{x:.2f}",
@@ -575,8 +591,8 @@ def main() -> int:
     print(f"\nDetailed matches: {detail_path}")
     print(f"Metrics summary:  {metrics_path}")
     print("Note: positive bias means the forecast overpredicted PM2.5; negative bias means it underpredicted.")
-    if len(evaluated) < 50:
-        print("CAUTION: fewer than 50 matched forecasts. Treat these metrics as preliminary, not as a reliable model ranking.")
+    if evaluated["valid_at"].nunique() < 50:
+        print("CAUTION: fewer than 50 distinct target timestamps. Treat these metrics as preliminary, not as a reliable model ranking.")
     return 0
 
 
